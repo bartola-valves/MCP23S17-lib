@@ -5,12 +5,13 @@ A modern C++ library for interfacing with the MCP23S17 16-bit I/O Expander using
 ## Features
 
 - **Modern C++ API**: Clean, object-oriented interface with RAII principles
+- **Interrupt Support**: Complete INTA/INTB interrupt handling with GPIO integration
 - **Multiple Device Support**: Support for up to 8 devices on the same SPI bus using hardware addressing
 - **Comprehensive I/O Operations**: Individual pin control, port-level operations, and 16-bit operations
 - **Hardware Features**: Pull-up resistors, input polarity inversion, configurable I/O directions
 - **Built-in Patterns**: Running lights, binary counter, and other useful patterns
 - **Error Handling**: Boolean return values for easy error checking
-- **Pico SDK Integration**: Uses hardware SPI and GPIO libraries
+- **Pico SDK Integration**: Uses hardware SPI, GPIO, and interrupt libraries
 
 ## Hardware Setup
 
@@ -41,6 +42,17 @@ The MCP23S17 supports up to 8 devices on the same SPI bus using hardware address
 | ... | ... | ... | ... |
 | 1  | 1  | 1  | 0x07 |
 
+### Interrupt Connections (Optional)
+
+For interrupt-driven applications, connect the interrupt pins:
+
+| MCP23S17 Pin | Function | Pico GPIO | Notes |
+|--------------|----------|-----------|--------|
+| INTA (pin 19) | Port A Interrupt | GPIO 20 | Active low, open-drain |
+| INTB (pin 20) | Port B Interrupt | GPIO 21 | Active low, open-drain |
+
+**Important**: Use external pull-up resistors (10kΩ) or enable internal pull-ups on the Pico interrupt pins.
+
 ## Installation
 
 1. Copy `mcp23s17.hpp` and `mcp23s17.cpp` to your project directory
@@ -56,6 +68,7 @@ target_link_libraries(your_project
     pico_stdlib
     hardware_spi
     hardware_gpio
+    hardware_irq  # Required for interrupt support
 )
 ```
 
@@ -128,6 +141,31 @@ Enable/disable internal pull-up resistors for a port.
 
 #### `bool setPinPullup(MCP23S17_Port port, uint8_t pin, bool enable)`
 Enable/disable pull-up for an individual pin.
+
+### Interrupt Methods
+
+#### `bool enableInterruptOnChange(MCP23S17_Port port, uint8_t pin_mask)`
+Enable interrupt-on-change for specified pins. When enabled, any change on these pins will trigger an interrupt.
+
+#### `bool enablePinInterrupt(MCP23S17_Port port, uint8_t pin, bool enable)`
+Enable/disable interrupt for a specific pin.
+
+#### `bool setInterruptControl(MCP23S17_Port port, uint8_t control_mask)`
+Set interrupt control mode (0 = interrupt on change, 1 = compare with DEFVAL).
+
+#### `bool configureInterruptOutput(bool mirror = false, bool active_high = false)`
+Configure interrupt pin behavior:
+- `mirror`: true = INTA and INTB are connected, false = separate interrupt pins
+- `active_high`: true = active high, false = active low (default)
+
+#### `uint8_t getInterruptFlags(MCP23S17_Port port)`
+Read interrupt flags to determine which pins caused the interrupt.
+
+#### `uint8_t getInterruptCapture(MCP23S17_Port port)`
+Read the captured GPIO values at the time of interrupt.
+
+#### `bool clearInterrupts(MCP23S17_Port port)`
+Clear interrupts by reading the interrupt capture register.
 
 ### I/O Operations
 
@@ -222,6 +260,67 @@ device1.writePort(MCP23S17_Port::A, 0xAA);
 device2.writePort(MCP23S17_Port::A, 0x55);
 ```
 
+### Interrupt-Driven Input (Advanced)
+```cpp
+#include "hardware/irq.h"
+
+// Global variables for interrupt handling
+volatile bool interrupt_occurred = false;
+MCP23S17 *global_mcp = nullptr;
+
+// Interrupt handler
+void gpio_interrupt_handler(uint gpio, uint32_t events) {
+    if (gpio == 21 && (events & GPIO_IRQ_EDGE_FALL)) {  // INTB pin
+        interrupt_occurred = true;
+    }
+}
+
+int main() {
+    // ... standard setup ...
+    
+    // Setup MCP23S17
+    MCP23S17 mcp(spi0, 17, 0);
+    mcp.begin();
+    global_mcp = &mcp;
+    
+    // Configure interrupt pins on Pico
+    gpio_init(21);  // INTB pin
+    gpio_set_dir(21, GPIO_IN);
+    gpio_pull_up(21);
+    gpio_set_irq_enabled_with_callback(21, GPIO_IRQ_EDGE_FALL, true, 
+                                       &gpio_interrupt_handler);
+    
+    // Configure MCP23S17 for interrupts
+    mcp.setupButtonPort(MCP23S17_Port::B);           // Port B as inputs
+    mcp.setupLEDPort(MCP23S17_Port::A);              // Port A as outputs
+    mcp.configureInterruptOutput(false, false);      // Separate pins, active low
+    mcp.enablePinInterrupt(MCP23S17_Port::B, 0, true); // Enable interrupt on GB0
+    mcp.setInterruptControl(MCP23S17_Port::B, 0x00);  // Interrupt on change
+    mcp.clearInterrupts(MCP23S17_Port::B);            // Clear any pending
+    
+    while (true) {
+        if (interrupt_occurred) {
+            interrupt_occurred = false;
+            
+            // Read interrupt flags to see which pin triggered
+            uint8_t flags = mcp.getInterruptFlags(MCP23S17_Port::B);
+            uint8_t captured = mcp.getInterruptCapture(MCP23S17_Port::B);
+            
+            if (flags & 0x01) {  // GPB0 triggered
+                bool button_pressed = !(captured & 0x01);  // Active low
+                printf("Button %s!\n", button_pressed ? "PRESSED" : "RELEASED");
+                
+                // Toggle LED feedback
+                mcp.togglePin(MCP23S17_Port::A, 0);
+            }
+            
+            mcp.clearInterrupts(MCP23S17_Port::B);  // Clear interrupt
+        }
+        sleep_ms(10);
+    }
+}
+```
+
 ### 16-bit Operations
 ```cpp
 // Configure both ports as outputs
@@ -305,7 +404,26 @@ This library is provided under the MIT License. See the source files for full li
 
 ## Credits
 
-Based on the original work by Mathias Yde (https://github.com/MathiasYde/pico-mcp23s17) with significant enhancements and a complete C++ rewrite.
+Based on the original work by Mathias Yde (https://github.com/MathiasYde/pico-mcp23s17) with significant enhancements, complete C++ rewrite, and interrupt support implementation.
+
+## Recent Updates
+
+### v2.0 - Interrupt Support
+- ✨ **Complete INTA/INTB interrupt functionality**
+- ✨ **Hardware interrupt handlers with GPIO integration**  
+- ✨ **Spurious interrupt detection and filtering**
+- ✨ **Comprehensive interrupt test program**
+- 🔧 **Fixed critical CS pin initialization bug**
+- 🔧 **Enhanced library robustness and error handling**
+- 📚 **Updated documentation with interrupt examples**
+
+### Key Interrupt Features
+- **Pin-specific interrupt configuration**
+- **Interrupt flag reading and clearing** 
+- **Pin state capture at interrupt time**
+- **Configurable interrupt output (mirrored/separate, active high/low)**
+- **Real-time interrupt processing with visual feedback**
+- **Switch press/release detection with debouncing**
 
 ## Features
 
