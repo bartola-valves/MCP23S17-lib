@@ -38,7 +38,7 @@ bool MCP23S17::begin()
 
 int MCP23S17::spiTransaction(uint8_t opcode, uint8_t reg, uint8_t *data, uint8_t data_len, bool is_read)
 {
-    if (!initialized_ || !data)
+    if (!data)
     {
         return PICO_ERROR_INVALID_ARG;
     }
