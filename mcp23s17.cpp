@@ -162,6 +162,94 @@ bool MCP23S17::setPortPolarity(MCP23S17_Port port, uint8_t polarity_mask)
     return writeRegister(reg, polarity_mask);
 }
 
+// Interrupt Methods Implementation
+
+bool MCP23S17::enableInterruptOnChange(MCP23S17_Port port, uint8_t pin_mask)
+{
+    uint8_t reg = (port == MCP23S17_Port::A) ? MCP23S17_GPINTEN_A : MCP23S17_GPINTEN_B;
+    return writeRegister(reg, pin_mask);
+}
+
+bool MCP23S17::enablePinInterrupt(MCP23S17_Port port, uint8_t pin, bool enable)
+{
+    if (pin > 7)
+    {
+        return false;
+    }
+
+    uint8_t reg = (port == MCP23S17_Port::A) ? MCP23S17_GPINTEN_A : MCP23S17_GPINTEN_B;
+    uint8_t current_value = readRegister(reg);
+
+    if (enable)
+    {
+        current_value |= (1 << pin); // Set bit to enable interrupt
+    }
+    else
+    {
+        current_value &= ~(1 << pin); // Clear bit to disable interrupt
+    }
+
+    return writeRegister(reg, current_value);
+}
+
+bool MCP23S17::setInterruptControl(MCP23S17_Port port, uint8_t control_mask)
+{
+    uint8_t reg = (port == MCP23S17_Port::A) ? MCP23S17_INTCON_A : MCP23S17_INTCON_B;
+    return writeRegister(reg, control_mask);
+}
+
+bool MCP23S17::setInterruptDefaultValue(MCP23S17_Port port, uint8_t default_value)
+{
+    uint8_t reg = (port == MCP23S17_Port::A) ? MCP23S17_DEFVAL_A : MCP23S17_DEFVAL_B;
+    return writeRegister(reg, default_value);
+}
+
+uint8_t MCP23S17::getInterruptFlags(MCP23S17_Port port)
+{
+    uint8_t reg = (port == MCP23S17_Port::A) ? MCP23S17_INTF_A : MCP23S17_INTF_B;
+    return readRegister(reg);
+}
+
+uint8_t MCP23S17::getInterruptCapture(MCP23S17_Port port)
+{
+    uint8_t reg = (port == MCP23S17_Port::A) ? MCP23S17_INTCAP_A : MCP23S17_INTCAP_B;
+    return readRegister(reg);
+}
+
+bool MCP23S17::clearInterrupts(MCP23S17_Port port)
+{
+    // Clear interrupts by reading GPIO and INTCAP registers
+    uint8_t gpio_reg = (port == MCP23S17_Port::A) ? MCP23S17_GPIO_A : MCP23S17_GPIO_B;
+    uint8_t intcap_reg = (port == MCP23S17_Port::A) ? MCP23S17_INTCAP_A : MCP23S17_INTCAP_B;
+
+    // Read both registers to clear interrupt condition
+    readRegister(gpio_reg);
+    readRegister(intcap_reg);
+
+    return true;
+}
+
+bool MCP23S17::configureInterruptOutput(bool mirror_interrupts, bool active_high)
+{
+    uint8_t iocon_value = 0x08; // HAEN=1 (hardware addressing enabled)
+
+    if (mirror_interrupts)
+    {
+        iocon_value |= 0x40; // MIRROR=1 (INTA and INTB are internally connected)
+    }
+
+    if (active_high)
+    {
+        iocon_value |= 0x02; // INTPOL=1 (active high)
+    }
+
+    // Write to both IOCON registers
+    bool success = writeRegister(MCP23S17_IOCON_A, iocon_value);
+    success &= writeRegister(MCP23S17_IOCON_B, iocon_value);
+
+    return success;
+}
+
 uint8_t MCP23S17::readPort(MCP23S17_Port port)
 {
     uint8_t reg = (port == MCP23S17_Port::A) ? MCP23S17_GPIO_A : MCP23S17_GPIO_B;

@@ -199,6 +199,70 @@ public:
      */
     bool setPortPolarity(MCP23S17_Port port, uint8_t polarity_mask);
 
+    // Interrupt Methods
+
+    /**
+     * @brief Enable interrupt on pin change for a port
+     * @param port Port to configure
+     * @param pin_mask Pin mask (1=enable interrupt, 0=disable)
+     * @return true on success, false on failure
+     */
+    bool enableInterruptOnChange(MCP23S17_Port port, uint8_t pin_mask);
+
+    /**
+     * @brief Enable interrupt on pin change for individual pin
+     * @param port Port containing the pin
+     * @param pin Pin number (0-7)
+     * @param enable true to enable interrupt, false to disable
+     * @return true on success, false on failure
+     */
+    bool enablePinInterrupt(MCP23S17_Port port, uint8_t pin, bool enable);
+
+    /**
+     * @brief Set interrupt control mode for a port
+     * @param port Port to configure
+     * @param control_mask Control mask (1=compare with DEFVAL, 0=change from previous)
+     * @return true on success, false on failure
+     */
+    bool setInterruptControl(MCP23S17_Port port, uint8_t control_mask);
+
+    /**
+     * @brief Set default comparison value for interrupt
+     * @param port Port to configure
+     * @param default_value Default comparison value
+     * @return true on success, false on failure
+     */
+    bool setInterruptDefaultValue(MCP23S17_Port port, uint8_t default_value);
+
+    /**
+     * @brief Read interrupt flags (which pins caused interrupt)
+     * @param port Port to read
+     * @return Interrupt flags (1=interrupt occurred, 0=no interrupt)
+     */
+    uint8_t getInterruptFlags(MCP23S17_Port port);
+
+    /**
+     * @brief Read interrupt captured values (pin states when interrupt occurred)
+     * @param port Port to read
+     * @return Captured pin values at time of interrupt
+     */
+    uint8_t getInterruptCapture(MCP23S17_Port port);
+
+    /**
+     * @brief Clear interrupts by reading GPIO and INTCAP registers
+     * @param port Port to clear interrupts for
+     * @return true on success, false on failure
+     */
+    bool clearInterrupts(MCP23S17_Port port);
+
+    /**
+     * @brief Configure interrupt output polarity and mirroring
+     * @param mirror_interrupts true to mirror INTA and INTB, false for separate
+     * @param active_high true for active high interrupts, false for active low
+     * @return true on success, false on failure
+     */
+    bool configureInterruptOutput(bool mirror_interrupts = false, bool active_high = false);
+
     // I/O Methods
 
     /**
